@@ -195,42 +195,354 @@ func sendEmail(allCerts []CertInfo, expiringCerts []CertInfo) {
 }
 
 func buildEmailBody(allCerts []CertInfo, expiringCerts []CertInfo) string {
-	body := `<html><body style="font-family: Arial, sans-serif;">`
-	body += `<h2>SSL Certificate Monitoring Report</h2>`
-	body += fmt.Sprintf(`<p>Report generated: %s</p>`, time.Now().Format("2006-01-02 15:04:05"))
-
-	if len(expiringCerts) > 0 {
-		body += `<h3 style="color: #d9534f;">⚠️ Certificates Expiring Soon (≤14 days)</h3>`
-		body += `<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">`
-		body += `<tr style="background-color: #f8d7da;"><th>Name</th><th>URL</th><th>Certificate Name</th><th>Days Remaining</th><th>Expiry Date</th></tr>`
-
-		for _, cert := range expiringCerts {
-			color := "#d9534f"
-			if cert.DaysRemaining > 7 {
-				color = "#f0ad4e"
-			}
-			body += fmt.Sprintf(`<tr><td>%s</td><td>%s</td><td>%s</td><td style="color: %s; font-weight: bold;">%d</td><td>%s</td></tr>`,
-				cert.Name, cert.URL, cert.CommonName, color, cert.DaysRemaining, cert.ExpiryDate.Format("2006-01-02"))
+	body := `<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<style>
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
 		}
-		body += `</table><br>`
-	}
+		body {
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+			padding: 20px;
+			line-height: 1.6;
+		}
+		.container {
+			max-width: 900px;
+			margin: 0 auto;
+			background: #ffffff;
+			border-radius: 16px;
+			box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+			overflow: hidden;
+		}
+		.header {
+			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+			color: white;
+			padding: 40px;
+			text-align: center;
+		}
+		.header h1 {
+			font-size: 32px;
+			font-weight: 700;
+			margin-bottom: 10px;
+			text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+		}
+		.header p {
+			font-size: 16px;
+			opacity: 0.9;
+		}
+		.content {
+			padding: 40px;
+		}
+		.alert-section {
+			background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+			color: white;
+			padding: 30px;
+			border-radius: 12px;
+			margin-bottom: 30px;
+			box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
+		}
+		.alert-section h2 {
+			font-size: 24px;
+			margin-bottom: 20px;
+			display: flex;
+			align-items: center;
+			gap: 10px;
+		}
+		.section-title {
+			font-size: 24px;
+			color: #333;
+			margin-bottom: 20px;
+			padding-bottom: 10px;
+			border-bottom: 3px solid #667eea;
+			font-weight: 600;
+		}
+		.cert-card {
+			background: #f8f9fa;
+			border-left: 4px solid #667eea;
+			padding: 20px;
+			margin-bottom: 15px;
+			border-radius: 8px;
+			transition: transform 0.2s, box-shadow 0.2s;
+		}
+		.cert-card:hover {
+			transform: translateX(5px);
+			box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+		}
+		.cert-card.critical {
+			border-left-color: #dc3545;
+			background: #fff5f5;
+		}
+		.cert-card.warning {
+			border-left-color: #ffc107;
+			background: #fffbf0;
+		}
+		.cert-card.caution {
+			border-left-color: #ff9800;
+			background: #fff8f0;
+		}
+		.cert-header {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			margin-bottom: 12px;
+			flex-wrap: wrap;
+			gap: 10px;
+		}
+		.cert-name {
+			font-size: 18px;
+			font-weight: 700;
+			color: #333;
+		}
+		.cert-badge {
+			display: inline-block;
+			padding: 6px 16px;
+			border-radius: 20px;
+			font-size: 14px;
+			font-weight: 600;
+			color: white;
+		}
+		.badge-critical {
+			background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+			animation: pulse 2s infinite;
+		}
+		.badge-warning {
+			background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%);
+		}
+		.badge-caution {
+			background: linear-gradient(135deg, #ff9800 0%, #e68900 100%);
+		}
+		.badge-ok {
+			background: linear-gradient(135deg, #28a745 0%, #218838 100%);
+		}
+		@keyframes pulse {
+			0%, 100% { opacity: 1; }
+			50% { opacity: 0.7; }
+		}
+		.cert-details {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+			gap: 12px;
+			color: #555;
+			font-size: 14px;
+		}
+		.cert-detail-item {
+			display: flex;
+			gap: 8px;
+		}
+		.cert-detail-label {
+			font-weight: 600;
+			color: #333;
+		}
+		.cert-url {
+			color: #667eea;
+			text-decoration: none;
+			word-break: break-all;
+		}
+		.stats-container {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+			gap: 20px;
+			margin-bottom: 30px;
+		}
+		.stat-card {
+			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+			color: white;
+			padding: 25px;
+			border-radius: 12px;
+			text-align: center;
+			box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+		}
+		.stat-number {
+			font-size: 36px;
+			font-weight: 700;
+			margin-bottom: 8px;
+		}
+		.stat-label {
+			font-size: 14px;
+			opacity: 0.9;
+			text-transform: uppercase;
+			letter-spacing: 1px;
+		}
+		.footer {
+			background: #f8f9fa;
+			padding: 30px;
+			text-align: center;
+			color: #666;
+			font-size: 14px;
+			border-top: 1px solid #e0e0e0;
+		}
+		.footer a {
+			color: #667eea;
+			text-decoration: none;
+			font-weight: 600;
+		}
+		@media (max-width: 600px) {
+			.header h1 {
+				font-size: 24px;
+			}
+			.content {
+				padding: 20px;
+			}
+			.cert-header {
+				flex-direction: column;
+				align-items: flex-start;
+			}
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<div class="header">
+			<h1>🔒 SSL Certificate Monitor</h1>
+			<p>Generated: ` + time.Now().Format("Monday, January 2, 2006 at 3:04 PM") + `</p>
+		</div>
+		<div class="content">`
 
-	body += `<h3>All Monitored Certificates</h3>`
-	body += `<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">`
-	body += `<tr style="background-color: #f0f0f0;"><th>Name</th><th>URL</th><th>Certificate Name</th><th>Days Remaining</th><th>Expiry Date</th></tr>`
+	// Statistics
+	criticalCount := 0
+	warningCount := 0
+	cautionCount := 0
+	okCount := 0
 
 	for _, cert := range allCerts {
-		rowColor := "#ffffff"
-		if cert.DaysRemaining <= 14 {
-			rowColor = "#f8d7da"
+		if cert.DaysRemaining <= 7 {
+			criticalCount++
+		} else if cert.DaysRemaining <= 14 {
+			warningCount++
 		} else if cert.DaysRemaining <= 30 {
-			rowColor = "#fff3cd"
+			cautionCount++
+		} else {
+			okCount++
 		}
-		body += fmt.Sprintf(`<tr style="background-color: %s;"><td>%s</td><td>%s</td><td>%s</td><td>%d</td><td>%s</td></tr>`,
-			rowColor, cert.Name, cert.URL, cert.CommonName, cert.DaysRemaining, cert.ExpiryDate.Format("2006-01-02"))
 	}
 
-	body += `</table></body></html>`
+	body += `<div class="stats-container">`
+	body += fmt.Sprintf(`
+		<div class="stat-card">
+			<div class="stat-number">%d</div>
+			<div class="stat-label">Total Certificates</div>
+		</div>`, len(allCerts))
+	
+	if criticalCount > 0 {
+		body += fmt.Sprintf(`
+		<div class="stat-card" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);">
+			<div class="stat-number">%d</div>
+			<div class="stat-label">Critical (≤7 days)</div>
+		</div>`, criticalCount)
+	}
+	
+	if warningCount > 0 {
+		body += fmt.Sprintf(`
+		<div class="stat-card" style="background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%);">
+			<div class="stat-number">%d</div>
+			<div class="stat-label">Warning (8-14 days)</div>
+		</div>`, warningCount)
+	}
+	
+	body += `</div>`
+
+	// Expiring certificates section
+	if len(expiringCerts) > 0 {
+		body += `<div class="alert-section">
+			<h2><span style="font-size: 28px;">⚠️</span> Certificates Expiring Soon</h2>
+			<p style="margin-bottom: 20px; opacity: 0.9;">The following certificates need immediate attention:</p>`
+
+		for _, cert := range expiringCerts {
+			badgeClass := "badge-warning"
+			cardClass := "warning"
+			if cert.DaysRemaining <= 7 {
+				badgeClass = "badge-critical"
+				cardClass = "critical"
+			}
+
+			body += fmt.Sprintf(`
+			<div class="cert-card %s" style="background: white; border-left-color: white;">
+				<div class="cert-header">
+					<div class="cert-name" style="color: #333;">%s</div>
+					<span class="cert-badge %s">%d days remaining</span>
+				</div>
+				<div class="cert-details">
+					<div class="cert-detail-item">
+						<span class="cert-detail-label">URL:</span>
+						<span>%s</span>
+					</div>
+					<div class="cert-detail-item">
+						<span class="cert-detail-label">Certificate:</span>
+						<span>%s</span>
+					</div>
+					<div class="cert-detail-item">
+						<span class="cert-detail-label">Expires:</span>
+						<span>%s</span>
+					</div>
+				</div>
+			</div>`,
+				cardClass, cert.Name, badgeClass, cert.DaysRemaining,
+				cert.URL, cert.CommonName, cert.ExpiryDate.Format("January 2, 2006"))
+		}
+
+		body += `</div>`
+	}
+
+	// All certificates section
+	body += `<h2 class="section-title">📋 All Monitored Certificates</h2>`
+
+	for _, cert := range allCerts {
+		badgeClass := "badge-ok"
+		cardClass := ""
+		badgeText := fmt.Sprintf("%d days", cert.DaysRemaining)
+
+		if cert.DaysRemaining <= 7 {
+			badgeClass = "badge-critical"
+			cardClass = "critical"
+		} else if cert.DaysRemaining <= 14 {
+			badgeClass = "badge-warning"
+			cardClass = "warning"
+		} else if cert.DaysRemaining <= 30 {
+			badgeClass = "badge-caution"
+			cardClass = "caution"
+		}
+
+		body += fmt.Sprintf(`
+		<div class="cert-card %s">
+			<div class="cert-header">
+				<div class="cert-name">%s</div>
+				<span class="cert-badge %s">%s</span>
+			</div>
+			<div class="cert-details">
+				<div class="cert-detail-item">
+					<span class="cert-detail-label">🌐 URL:</span>
+					<span class="cert-url">%s</span>
+				</div>
+				<div class="cert-detail-item">
+					<span class="cert-detail-label">📜 Certificate:</span>
+					<span>%s</span>
+				</div>
+				<div class="cert-detail-item">
+					<span class="cert-detail-label">📅 Expires:</span>
+					<span>%s</span>
+				</div>
+			</div>
+		</div>`,
+			cardClass, cert.Name, badgeClass, badgeText,
+			cert.URL, cert.CommonName, cert.ExpiryDate.Format("January 2, 2006"))
+	}
+
+	body += `
+		</div>
+		<div class="footer">
+			<p>Automated SSL Certificate Monitoring System</p>
+			<p style="margin-top: 10px; font-size: 12px;">This is an automated notification. Please do not reply to this email.</p>
+		</div>
+	</div>
+</body>
+</html>`
+
 	return body
 }
 
